@@ -14,7 +14,7 @@ import keyboard
 camera1_sn=25062645 #right
 camera2_sn=20778657 #left
 # camera = Camera(camera_id=1,camera_sn=camera_sn)
-model_path="PoseEstimation\model\yolov8l_tennis_ball.pt"
+model_path="model\yolov8l_tennis_ball.pt"
 
 
 

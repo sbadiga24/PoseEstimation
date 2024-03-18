@@ -12,7 +12,7 @@ class CamParam():
         # Create a ConfigParser object
         config = configparser.ConfigParser()
         # Read the configuration file
-        config.read(f'PoseEstimation\config\SN{self.sn}.conf')
+        config.read(f'config/SN{self.sn}.conf')
 
         # left cam parameters
         left_fx_value = float(config.get(f'LEFT_CAM_{self.resolution}', 'fx'))
