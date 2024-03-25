@@ -8,105 +8,8 @@ from StereoCamera import *
 from pose_esitmation import *
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from ExtendedKalmanFilter import ExKalmanFilter
 
-class ExtendedKalmanFilter:
-    def __init__(self, dt=1, process_noise=1e-1, measurement_noise=1e-2, error_estimate=1):
-        self.dt = dt
-        # Initial state (position and velocity)
-        self.x = np.zeros((2, 1))
-        # State transition matrix is replaced by the state transition function f
-        # Measurement matrix is replaced by the measurement function h
-        self.Q = np.array([[process_noise, 0], [0, process_noise]])
-        self.R = np.array([[measurement_noise]])
-        self.P = np.array([[error_estimate, 0], [0, error_estimate]])
-
-    def f(self, x):
-        """ State transition function """
-        # Example linear function: x_next = Ax + Bu (without control input, u)
-        # Adapt this function to your system's dynamics
-        A = np.array([[1, self.dt], [0, 1]])
-        return np.dot(A, x)
-
-    def h(self, x):
-        """ Measurement function """
-        # Example linear measurement: z = Hx
-        # Adapt this function to your system's measurement model
-        H = np.array([[1, 0]])
-        return np.dot(H, x)
-
-    def F_jacobian(self, x):
-        """ Jacobian of the state transition function """
-        # This should be derived based on your specific f
-        return np.array([[1, self.dt], [0, 1]])
-
-    def H_jacobian(self, x):
-        """ Jacobian of the measurement function """
-        # This should be derived based on your specific h
-        return np.array([[1, 0]])
-
-    def predict(self):
-        # Use the state transition function instead of matrix
-        self.x = self.f(self.x)
-        F_jac = self.F_jacobian(self.x)
-        self.P = np.dot(F_jac, np.dot(self.P, F_jac.T)) + self.Q
-
-    def update(self, z):
-        z_pred = self.h(self.x)
-        y = z - z_pred
-        H_jac = self.H_jacobian(self.x)
-        S = np.dot(H_jac, np.dot(self.P, H_jac.T)) + self.R
-        K = np.dot(np.dot(self.P, H_jac.T), np.linalg.inv(S))
-        self.x = self.x + np.dot(K, y)
-        self.P = self.P - np.dot(K, np.dot(H_jac, self.P))
-
-    def predict_n_steps_ahead(self, n=10):
-        # Temporarily copy the current state and covariance
-        x_temp = np.copy(self.x)
-        P_temp = np.copy(self.P)
-        
-        # List to hold predicted states
-        predictions = []
-        
-        for _ in range(n):
-            # Predict using the state transition function
-            x_temp = self.f(x_temp)
-            
-            # Optionally, update the error covariance matrix here if needed
-            F_jac = self.F_jacobian(x_temp)
-            P_temp = np.dot(F_jac, np.dot(P_temp, F_jac.T)) + self.Q
-            
-            # Store the predicted state
-            predictions.append(x_temp.flatten())
-        
-        return predictions
-
-
-# class KalmanFilter:
-#     def __init__(self, dt=1, process_noise=1e-1, measurement_noise=1e-2, error_estimate=1):
-#         self.dt = dt  # Time step
-#         # State transition matrix
-#         self.A = np.array([[1, dt], [0, 1]])
-#         # Measurement matrix
-#         self.H = np.array([[1, 0]])
-#         # Process noise covariance
-#         self.Q = np.array([[process_noise, 0], [0, process_noise]])
-#         # Measurement noise covariance
-#         self.R = np.array([[measurement_noise]])
-#         # Error covariance matrix
-#         self.P = np.array([[error_estimate, 0], [0, error_estimate]])
-#         # Initial state (position and velocity)
-#         self.x = np.zeros((2, 1))
-    
-#     def predict(self):
-#         self.x = np.dot(self.A, self.x)
-#         self.P = np.dot(np.dot(self.A, self.P), self.A.T) + self.Q
-    
-#     def update(self, z):
-#         y = z - np.dot(self.H, self.x)
-#         S = self.R + np.dot(self.H, np.dot(self.P, self.H.T))
-#         K = np.dot(np.dot(self.P, self.H.T), np.linalg.inv(S))
-#         self.x = self.x + np.dot(K, y)
-#         self.P = self.P - np.dot(K, np.dot(self.H, self.P))
 
 class ObjectDetection:
     def __init__(self,model_path,camera_id,camera_sn,thershold=0.9,metric='cm',):
@@ -117,9 +20,9 @@ class ObjectDetection:
         self.camera_sn=camera_sn
         self.pose=[]
         self.model=self.load_model()
-        self.kf_x = ExtendedKalmanFilter()
-        self.kf_y = ExtendedKalmanFilter()
-        self.kf_z = ExtendedKalmanFilter()
+        self.kf_x = ExKalmanFilter()
+        self.kf_y = ExKalmanFilter()
+        self.kf_z = ExKalmanFilter()
         self.actual_positions = []  # List to store (X, Y, depth) tuples of actual positions
         self.predicted_positions = []  # List to store (X, Y, depth) tuples of predicted positions
     
