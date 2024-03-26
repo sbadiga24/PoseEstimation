@@ -3,12 +3,14 @@ import numpy as np
 from CamParam import *
 
 class Camera:
-    def __init__(self,camera_id,camera_sn,resolution='HD'):
+    def __init__(self,camera_id,camera_sn,resolution='HD',desired_fps=60):
         self.camera_id= camera_id
         
         self.resolution = {"2K": ["2k", 4416, 1242], "FHD": ["FHD", 3840, 1080], "HD": ["HD", 2560, 720], "VGA": ["VGA", 1344, 376]}
         self.SetResolution= self.resolution[resolution]
+        self.desired_fps=desired_fps
         self.cap= self.init_camera()
+
 
         StCamera=CamParam(camera_sn=camera_sn)
         StCamera.get_params()
@@ -25,6 +27,12 @@ class Camera:
             exit(-1)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.SetResolution[1])
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.SetResolution[2])
+        # Attempt to set the FPS
+        cap.set(cv2.CAP_PROP_FPS, self.desired_fps)
+
+        # Optionally, check if the FPS was set correctly
+        actual_fps = cap.get(cv2.CAP_PROP_FPS)
+        print(f"Requested FPS: {self.desired_fps}, Actual FPS: {actual_fps}")
         return cap
     
 
