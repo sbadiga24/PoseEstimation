@@ -12,7 +12,7 @@ from ExtendedKalmanFilter import ExKalmanFilter
 
 
 class ObjectDetection:
-    def __init__(self,model_path,camera_id,camera_sn,thershold=0.9,metric='cm',):
+    def __init__(self,model_path,camera_id,camera_sn,thershold=0.9,metric='cm'):
         self.model_path=model_path
         self.model_thershold=thershold
         self.camera=Camera(camera_id=camera_id,camera_sn=camera_sn,resolution="HD")

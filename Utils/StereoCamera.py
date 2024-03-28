@@ -21,20 +21,21 @@ class Camera:
         
 
     def init_camera(self):
-        cap = cv2.VideoCapture(self.camera_id)
+        cap = cv2.VideoCapture(self.camera_id)#r'Utils\vd11_1.mp4'
         if not cap.isOpened():
             print(f"Error opening video stream for camera {self.camera_id}")
             exit(-1)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.SetResolution[1])
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.SetResolution[2])
-        # Attempt to set the FPS
-        cap.set(cv2.CAP_PROP_FPS, self.desired_fps)
+        else:
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.SetResolution[1])
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.SetResolution[2])
+            # Attempt to set the FPS
+            cap.set(cv2.CAP_PROP_FPS, self.desired_fps)
 
-        # Optionally, check if the FPS was set correctly
-        actual_fps = cap.get(cv2.CAP_PROP_FPS)
-        print(f"Requested FPS: {self.desired_fps}, Actual FPS: {actual_fps}")
-        return cap
-    
+            # Optionally, check if the FPS was set correctly
+            actual_fps = cap.get(cv2.CAP_PROP_FPS)
+            print(f"Requested FPS: {self.desired_fps}, Actual FPS: {actual_fps}")
+            return cap
+        
 
     def capture_frame(self):
          retval, frame = self.cap.read()

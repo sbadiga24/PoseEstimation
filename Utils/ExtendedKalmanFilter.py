@@ -1,39 +1,50 @@
 import numpy as np
 
 class ExKalmanFilter:
-    def __init__(self, dt=1, process_noise=1e-1, measurement_noise=1e-2, error_estimate=1):
+    def __init__(self,dt=1/60, process_noise=0.09, measurement_noise=5.5, error_estimate=1):
         self.dt = dt
-        # Initial state (position and velocity)
-        self.x = np.zeros((2, 1))
-        # State transition matrix is replaced by the state transition function f
-        # Measurement matrix is replaced by the measurement function h
-        self.Q = np.array([[process_noise, 0], [0, process_noise]])
+        # Initial state (x_position, y_position, x_velocity, y_velocity)
+        self.x = np.zeros((4, 1))
+        # Process noise covariance matrix for a 4D state vector
+        self.Q = process_noise * np.eye(4)
+        # Measurement noise covariance matrix (assuming single-dimensional measurement, e.g., x_position)
         self.R = np.array([[measurement_noise]])
-        self.P = np.array([[error_estimate, 0], [0, error_estimate]])
+        # Error covariance matrix for a 4D state vector
+        self.P = error_estimate * np.eye(4)
 
     def f(self, x):
-        """ State transition function """
-        # Example linear function: x_next = Ax + Bu (without control input, u)
-        # Adapt this function to your system's dynamics
-        A = np.array([[1, self.dt], [0, 1]])
-        return np.dot(A, x)
+        """ State transition function including gravity """
+        g = -9.81  # Gravity, m/s^2
+        A = np.array([[1, 0, self.dt, 0],  # Transition for x_position
+                      [0, 1, 0, self.dt],  # Transition for y_position
+                      [0, 0, 1, 0],       # Transition for x_velocity
+                      [0, 0, 0, 1]])      # Transition for y_velocity
+        B = np.array([0, 0.5 * self.dt**2, 0, self.dt]).reshape(-1, 1)  # Control input for gravity affects y_velocity
+        u = g
+        new_x = np.dot(A, x) + B * u
+        return new_x
 
     def h(self, x):
         """ Measurement function """
-        # Example linear measurement: z = Hx
-        # Adapt this function to your system's measurement model
-        H = np.array([[1, 0]])
+        # If the measurement includes both x_position and y_position
+        H = np.array([[1, 0, 0, 0], 
+                      [0, 1, 0, 0]])
         return np.dot(H, x)
 
     def F_jacobian(self, x):
         """ Jacobian of the state transition function """
-        # This should be derived based on your specific f
-        return np.array([[1, self.dt], [0, 1]])
+        # This should be consistent with your specific f
+        return np.array([[1, 0, self.dt, 0],
+                         [0, 1, 0, self.dt],
+                         [0, 0, 1, 0],
+                         [0, 0, 0, 1]])
 
     def H_jacobian(self, x):
         """ Jacobian of the measurement function """
-        # This should be derived based on your specific h
-        return np.array([[1, 0]])
+        # This should be consistent with your specific h
+        # Adjust according to the dimensions of your measurement vector
+        return np.array([[1, 0, 0, 0],
+                         [0, 1, 0, 0]])
 
     def predict(self):
         # Use the state transition function instead of matrix
@@ -42,6 +53,7 @@ class ExKalmanFilter:
         self.P = np.dot(F_jac, np.dot(self.P, F_jac.T)) + self.Q
 
     def update(self, z):
+        # Assuming z is a 2D measurement (x_position, y_position)
         z_pred = self.h(self.x)
         y = z - z_pred
         H_jac = self.H_jacobian(self.x)
@@ -64,11 +76,4 @@ class ExKalmanFilter:
             
             # Optionally, update the error covariance matrix here if needed
             F_jac = self.F_jacobian(x_temp)
-            P_temp = np.dot(F_jac, np.dot(P_temp, F_jac.T)) + self.Q
-            
-            # Store the predicted state
-            predictions.append(x_temp.flatten())
-        
-        return predictions
-
-
+            P_temp
