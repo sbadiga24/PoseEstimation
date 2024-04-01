@@ -27,9 +27,9 @@ def pose(right_point, left_point, baseline,f_pixel,CxCy,metric="cm"):
         print("Warning: Disparity is zero, which may indicate an error in point matching.")
         return None, None, None 
     # CALCULATE DEPTH z:
-    zDepth = (baseline*f_pixel)/disparity             #Depth in [cm]
-    X=((x2-CxCy['Left_Cx'])*zDepth)/f_pixel
-    Y=((y2-CxCy['Left_Cy'])*zDepth)/f_pixel
+    zDepth = round(((baseline*f_pixel)/disparity),2)             #Depth in [cm]
+    X=round((((x2-CxCy['Left_Cx'])*zDepth)/f_pixel),2)
+    Y=round((((y2-CxCy['Left_Cy'])*zDepth)/f_pixel),2)
 
     return [X,Y,zDepth]
 

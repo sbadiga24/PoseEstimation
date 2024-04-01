@@ -104,7 +104,7 @@ class contour_OB:
                 predicted_X, predicted_Y, predicted_depth = self.futurepredicted_positions[0]
 
                 # Ensure img is defined and refers to a valid image
-                self.actual_positions.append((X, Y, depth))
+                self.actual_positions.append([X, Y, depth])
                 self.predicted_positions.append((predicted_X, predicted_Y, predicted_depth))
             else:
                 print("Skipping drawing circle due to invalid predicted_X or predicted_Y values.")
@@ -122,8 +122,8 @@ class contour_OB:
             
 
 
-        cv2.imshow("Right", right_image)
-        cv2.imshow("Left", left_image)
+        cv2.imshow(f"{self.camera_sn}Right", right_image)
+        cv2.imshow(f"{self.camera_sn}Left", left_image)
         cv2.waitKey(1)
         
 
@@ -139,7 +139,7 @@ class contour_OB:
         errors = []
         for i in range(len(self.actual_positions)-1):
             actual=self.actual_positions[i+1]
-            first_predicted=self.futurepredicted_positions[8]
+            first_predicted=self.futurepredicted_positions[self.N_prediction]
             for j in range(self.N_prediction):
                 self.futurepredicted_positions.pop(j)
             # first_predicted = predicted_set[8]  # Assuming the first prediction corresponds to the actual point
@@ -151,7 +151,7 @@ class contour_OB:
         plt.plot(errors, label='Prediction Error', marker='o')
         plt.xlabel('Measurement Number')
         plt.ylabel('Error (Euclidean distance)')
-        plt.title('Error between Actual and Predicted Future Trajectories')
+        plt.title(f'Error between Actual and Predicted Future Trajectories in "{self.metric}"')
         plt.legend()
         plt.show()
 
@@ -159,8 +159,8 @@ class contour_OB:
     def plot_positions(self):
         # Separate actual and predicted positions into X, Y, Z components for plotting
 
-        print("pre\n",self.futurepredicted_positions)
-        print("\nlen",len(self.futurepredicted_positions))
+        # print("actual line\n",self.actual_positions)
+        # print("\nprediction line",self.futurepredicted_positions)
 
         actual_x, actual_y, actual_z = zip(*self.actual_positions)
         predicted_x, predicted_y, predicted_z = zip(*self.predicted_positions)
@@ -172,10 +172,9 @@ class contour_OB:
         ax = fig.add_subplot(111, projection='3d')
         
         # Plot actual positions
-        ax.scatter(actual_x, actual_y, actual_z, c='blue', marker='o', label='Actual', alpha=0.25)
+        ax.plot(actual_x, actual_y, actual_z, c='blue',marker='o', label='Actual', alpha=0.2)
         # Plot predicted positions
-        ax.scatter(predicted_x, predicted_y, predicted_z, c='red', marker='*', label='Predicted', alpha=0.35)
-        ax.scatter(fpredicted_x, fpredicted_y, fpredicted_z, c='green', marker='>', label='fPredicted', alpha=0.55)
+        ax.plot(fpredicted_x, fpredicted_y, fpredicted_z, c='red',marker='>', label='fPredicted', alpha=0.2)
         
         # Labels and legend
         ax.set_xlabel('X Position')
