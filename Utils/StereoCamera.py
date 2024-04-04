@@ -3,9 +3,9 @@ import numpy as np
 from CamParam import *
 
 class Camera:
-    def __init__(self,camera_id,camera_sn,resolution='HD',desired_fps=60):
+    def __init__(self,camera_id,camera_sn,resolution='HD',desired_fps=60,cam=True):
         self.camera_id= camera_id
-        
+        self.cam=cam
         self.resolution = {"2K": ["2k", 4416, 1242], "FHD": ["FHD", 3840, 1080], "HD": ["HD", 2560, 720], "VGA": ["VGA", 1344, 376]}
         self.SetResolution= self.resolution[resolution]
         self.desired_fps=desired_fps
@@ -21,7 +21,11 @@ class Camera:
         
 
     def init_camera(self):
-        cap = cv2.VideoCapture(self.camera_id)#r'Utils\vd11_1.mp4'
+        if self.cam:
+            cap = cv2.VideoCapture(self.camera_id)#r'Utils\vd11_1.mp4'
+        else:
+            cap = cv2.VideoCapture(r'data\videos\vd1.mp4')
+            
         if not cap.isOpened():
             print(f"Error opening video stream for camera {self.camera_id}")
             exit(-1)

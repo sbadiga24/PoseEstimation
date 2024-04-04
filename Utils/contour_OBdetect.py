@@ -13,7 +13,7 @@ class contour_OB:
             self.N_prediction=N_prediction
             self.model_thershold=thershold
             camera_path="vd11_1.mp4"
-            self.camera=Camera(camera_id=camera_id,camera_sn=camera_sn,resolution="HD",desired_fps=60)
+            self.camera=Camera(camera_id=camera_id,camera_sn=camera_sn,resolution="HD",desired_fps=60,cam=False)
             self.metric=metric
             self.camera_sn=camera_sn
             self.pose=[]
@@ -23,7 +23,6 @@ class contour_OB:
             self.left=balltracking()
             self.right=balltracking()
             self.actual_positions = []  # List to store (X, Y, depth) tuples of actual positions
-            self.predicted_positions = []  # List to store (X, Y, depth) tuples of predicted positions
             self.futurepredicted_positions=[]
 
     def process_images(self):
@@ -101,11 +100,9 @@ class contour_OB:
                     fpredicted_depth = np.round(self.kf_z.x[0, 0], 2)
                     self.futurepredicted_positions.append([fpredicted_X, fpredicted_Y, fpredicted_depth])
                     
-                predicted_X, predicted_Y, predicted_depth = self.futurepredicted_positions[0]
 
                 # Ensure img is defined and refers to a valid image
                 self.actual_positions.append([X, Y, depth])
-                self.predicted_positions.append((predicted_X, predicted_Y, predicted_depth))
             else:
                 print("Skipping drawing circle due to invalid predicted_X or predicted_Y values.")
             ##left image
@@ -159,11 +156,7 @@ class contour_OB:
     def plot_positions(self):
         # Separate actual and predicted positions into X, Y, Z components for plotting
 
-        # print("actual line\n",self.actual_positions)
-        # print("\nprediction line",self.futurepredicted_positions)
-
         actual_x, actual_y, actual_z = zip(*self.actual_positions)
-        predicted_x, predicted_y, predicted_z = zip(*self.predicted_positions)
         fpredicted_x, fpredicted_y, fpredicted_z = zip(*self.futurepredicted_positions)
 
         
@@ -184,121 +177,3 @@ class contour_OB:
         
         plt.show() 
 
-    def qplot_positions_and_errors(self):
-        # Check if there's data to plot
-        if not self.actual_positions or not self.predicted_positions:
-            print("No data available for plotting.")
-            return
-        
-        # Convert lists to numpy arrays for easier manipulation
-        actual = np.array(self.actual_positions)
-        predicted = np.array(self.predicted_positions)
-        
-        # Calculate errors (Euclidean distance between actual and predicted positions)
-        errors = np.sqrt(np.sum((actual - predicted)**2, axis=1))
-        
-        # Time or sequence axis
-        t = np.arange(len(errors))
-        
-        # Plotting the error over time
-        plt.figure(figsize=(12, 6))
-        plt.subplot(1, 2, 1)  # 1 row, 2 columns, 1st subplot
-        plt.plot(t, errors, label='Error', marker='o')
-        plt.xlabel('Measurement Number')
-        plt.ylabel('Error (Euclidean distance)')
-        plt.title('Error between Actual and Predicted Positions')
-        plt.grid(True)
-        plt.legend()
-        
-        actual_x, actual_y, actual_z = zip(*self.actual_positions)
-        predicted_x, predicted_y, predicted_z = zip(*self.predicted_positions)
-        
-        # Create 3D plot
-        fig = plt.figure(f'{self.camera_sn}')
-        ax = fig.add_subplot(111, projection='3d')
-        
-        # Plot actual positions
-        ax.scatter(actual_x, actual_y, actual_z, c='blue', marker='o', label='Actual')
-        # Plot predicted positions
-        ax.scatter(predicted_x, predicted_y, predicted_z, c='red', marker='^', label='Predicted')
-        
-        # Labels and legend
-        ax.set_xlabel('X Position')
-        ax.set_ylabel('Y Position')
-        ax.set_zlabel('Z Position')
-        ax.legend()
-        
-        plt.tight_layout()  # Adjusts subplot params so that subplots are nicely fit in the figure area.
-        plt.show()
-
-
-
-
-    def IDL_plot_positions_and_errors(self):
-        # Check if there's data to plot
-        if not self.actual_positions or not self.predicted_positions:
-            print("No data available for plotting.")
-            return
-        
-        # Convert lists to numpy arrays for easier manipulation
-        actual = np.array(self.actual_positions)
-        predicted = np.array(self.predicted_positions)
-        
-        # Component-wise errors
-        errors_x = np.abs(actual[:, 0] - predicted[:, 0])
-        errors_y = np.abs(actual[:, 1] - predicted[:, 1])
-        errors_z = np.abs(actual[:, 2] - predicted[:, 2])
-        
-        # Time or sequence axis
-        t = np.arange(len(actual))
-        
-        # Plotting
-        fig, axs = plt.subplots(3, 2, figsize=(15, 15))
-        
-        # X component plot
-        axs[0, 0].plot(t, actual[:, 0], 'b-', label='Actual X')
-        axs[0, 0].plot(t, predicted[:, 0], 'r--', label='Predicted X')
-        axs[0, 0].set_xlabel('Measurement Number')
-        axs[0, 0].set_ylabel('X Position')
-        axs[0, 0].legend()
-        axs[0, 0].grid(True)
-
-        # Error in X
-        axs[0, 1].plot(t, errors_x, 'k-', label='Error in X')
-        axs[0, 1].set_xlabel('Measurement Number')
-        axs[0, 1].set_ylabel('Error')
-        axs[0, 1].legend()
-        axs[0, 1].grid(True)
-        
-        # Y component plot
-        axs[1, 0].plot(t, actual[:, 1], 'g-', label='Actual Y')
-        axs[1, 0].plot(t, predicted[:, 1], 'r--', label='Predicted Y')
-        axs[1, 0].set_xlabel('Measurement Number')
-        axs[1, 0].set_ylabel('Y Position')
-        axs[1, 0].legend()
-        axs[1, 0].grid(True)
-
-        # Error in Y
-        axs[1, 1].plot(t, errors_y, 'k-', label='Error in Y')
-        axs[1, 1].set_xlabel('Measurement Number')
-        axs[1, 1].set_ylabel('Error')
-        axs[1, 1].legend()
-        axs[1, 1].grid(True)
-
-        # Z component plot
-        axs[2, 0].plot(t, actual[:, 2], 'c-', label='Actual Z')
-        axs[2, 0].plot(t, predicted[:, 2], 'r--', label='Predicted Z')
-        axs[2, 0].set_xlabel('Measurement Number')
-        axs[2, 0].set_ylabel('Z Position')
-        axs[2, 0].legend()
-        axs[2, 0].grid(True)
-
-        # Error in Z
-        axs[2, 1].plot(t, errors_z, 'k-', label='Error in Z')
-        axs[2, 1].set_xlabel('Measurement Number')
-        axs[2, 1].set_ylabel('Error')
-        axs[2, 1].legend()
-        axs[2, 1].grid(True)
-
-        plt.tight_layout()
-        plt.show()

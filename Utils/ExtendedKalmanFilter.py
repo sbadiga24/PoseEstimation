@@ -1,7 +1,7 @@
 import numpy as np
 
 class ExKalmanFilter:
-    def __init__(self,dt=1/60, process_noise=0.09, measurement_noise=5.5, error_estimate=1):
+    def __init__(self,dt=1/60, process_noise=0.1, measurement_noise=5.5, error_estimate=1):
         self.dt = dt
         # Initial state (x_position, y_position, x_velocity, y_velocity)
         self.x = np.zeros((4, 1))
