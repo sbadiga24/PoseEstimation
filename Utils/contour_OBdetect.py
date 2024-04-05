@@ -6,6 +6,19 @@ from pose_esitmation import *
 from ball_tracking import *
 import matplotlib.pyplot as plt
 from ExtendedKalmanFilter import *
+import sys
+import numpy as np
+from PyQt5.QtWidgets import QApplication
+from PyQt5.QtCore import QObject, pyqtSignal
+import threading
+import time
+import pyqtgraph.opengl as gl
+from PyQt5.QtGui import QQuaternion
+
+
+class SignalEmitter(QObject):
+    """Emit signals with new data."""
+    newData = pyqtSignal(np.ndarray, np.ndarray)
 
 
 class contour_OB:
@@ -13,7 +26,7 @@ class contour_OB:
             self.N_prediction=N_prediction
             self.model_thershold=thershold
             camera_path="vd11_1.mp4"
-            self.camera=Camera(camera_id=camera_id,camera_sn=camera_sn,resolution="HD",desired_fps=60,cam=False)
+            self.camera=Camera(camera_id=camera_id,camera_sn=camera_sn,resolution="HD",desired_fps=60,cam=True)
             self.metric=metric
             self.camera_sn=camera_sn
             self.pose=[]
@@ -24,6 +37,51 @@ class contour_OB:
             self.right=balltracking()
             self.actual_positions = []  # List to store (X, Y, depth) tuples of actual positions
             self.futurepredicted_positions=[]
+            ####################################################################################
+            self.app = QApplication(sys.argv)
+            self.window = self.setup_ui()
+            self.actualData = []
+            self.predictedData = []
+            self.emitter = SignalEmitter()
+            self.emitter.newData.connect(self.update_plot)
+
+
+    def setup_ui(self):
+        """Set up the GUI."""
+        w = gl.GLViewWidget()
+        w.setWindowTitle('Real-time 3D Plotting of Actual vs. Predicted Points')
+        # rotation = QQuaternion.fromEulerAngles(90 ,45,0)
+
+        
+        w.setCameraPosition(distance=500)
+        w.setBackgroundColor('grey')
+
+        grid = gl.GLGridItem()
+        grid.scale(10, 10, 10)
+        w.addItem(grid)
+
+        self.actualScatter = gl.GLScatterPlotItem(pos=np.array([[0, 0, 0]]), color=(1, 0, 0, 1), size=10)
+        w.addItem(self.actualScatter)
+
+        self.predictedScatter = gl.GLScatterPlotItem(pos=np.array([[0, 0, 0]]), color=(0, 1, 0, 1), size=10)
+        w.addItem(self.predictedScatter)
+
+        axis = gl.GLAxisItem()
+        axis.setSize(150, 150, 150)
+        w.addItem(axis)
+
+        w.show()
+        return w
+    
+    def update_plot(self, actual, predicted):
+        """Update plot with new data."""
+        self.actualScatter.setData(pos=actual, color=(1, 0, 0, 1), size=5)
+        self.predictedScatter.setData(pos=predicted, color=(0, 1, 0, 1), size=5)
+    
+
+    def run_app(self):
+        self.app.exec_()
+
 
     def process_images(self):
         fps_counter = 0
@@ -46,6 +104,9 @@ class contour_OB:
 
                 # Display FPS on the images
                 fps_text = f"FPS: {fps:.2f}"
+                self.kf_x.dt=(1/(fps+1))
+                self.kf_y.dt=(1/(fps+1))
+                self.kf_z.dt=(1/(fps+1))
                 # get ball detection on left and  right frame #
                 left_image,Lcenter=self.left.pos(left_image)
                 right_image,Rcenter=self.right.pos(right_image)
@@ -103,6 +164,8 @@ class contour_OB:
 
                 # Ensure img is defined and refers to a valid image
                 self.actual_positions.append([X, Y, depth])
+                
+                self.emitter.newData.emit(np.array(self.actual_positions), np.array(self.futurepredicted_positions))
             else:
                 print("Skipping drawing circle due to invalid predicted_X or predicted_Y values.")
             ##left image
@@ -129,23 +192,27 @@ class contour_OB:
         if not self.actual_positions or not self.futurepredicted_positions:
             print("Not enough data for error calculation.")
             return
-        # print("act\n",self.actual_positions)
 
-        # print(self.futurepredicted_positions[1+8])
         # Calculate errors
-        errors = []
+        merrors = []
+        
+        y=100
         for i in range(len(self.actual_positions)-1):
             actual=self.actual_positions[i+1]
-            first_predicted=self.futurepredicted_positions[self.N_prediction]
+            first_predicted=self.futurepredicted_positions[self.N_prediction-1]
             for j in range(self.N_prediction):
-                self.futurepredicted_positions.pop(j)
+                e = np.linalg.norm(np.array(actual) - np.array(self.futurepredicted_positions[j]))
+                if e<y:
+                    print("error",actual,self.futurepredicted_positions[j],e)
+
+                    y=e
+                self.futurepredicted_positions.pop(0)
             # first_predicted = predicted_set[8]  # Assuming the first prediction corresponds to the actual point
-            error = np.linalg.norm(np.array(actual) - np.array(first_predicted))
-            errors.append(error)
+            merrors.append(y)
         
         # Plot errors
         plt.figure()
-        plt.plot(errors, label='Prediction Error', marker='o')
+        plt.plot(merrors, label='Prediction Error', marker='o')
         plt.xlabel('Measurement Number')
         plt.ylabel('Error (Euclidean distance)')
         plt.title(f'Error between Actual and Predicted Future Trajectories in "{self.metric}"')

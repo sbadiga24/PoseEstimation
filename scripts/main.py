@@ -20,6 +20,7 @@ camera2_sn=20778657 #left
 
 if __name__ == "__main__":
     camera1 = contour_OB(camera_id=1,camera_sn=camera1_sn)
+    
     # camera2 = contour_OB(camera_id=2,camera_sn=camera2_sn)
 
     # camera2 = ObjectDetection(model_path,camera_id=1,camera_sn=camera2_sn)
@@ -33,6 +34,7 @@ if __name__ == "__main__":
 
 
     thread1.start()
+    camera1.run_app()
     # thread2.start()
 
     thread1.join()
