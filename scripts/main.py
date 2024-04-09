@@ -19,7 +19,8 @@ camera2_sn=20778657 #left
 
 
 if __name__ == "__main__":
-    camera1 = contour_OB(camera_id=1,camera_sn=camera1_sn)
+    camera1 = contour_OB(camera_id=1,camera_sn=camera1_sn,cam_state=False,N_prediction=15)
+    
     
     # camera2 = contour_OB(camera_id=2,camera_sn=camera2_sn)
 

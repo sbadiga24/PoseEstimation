@@ -18,20 +18,19 @@ from PyQt5.QtGui import QQuaternion
 
 class SignalEmitter(QObject):
     """Emit signals with new data."""
-    newData = pyqtSignal(np.ndarray, np.ndarray)
+    newData = pyqtSignal(np.ndarray, np.ndarray, np.ndarray)
 
 
 class contour_OB:
-    def __init__(self,camera_id,camera_sn,thershold=0.9,metric='cm',N_prediction=15):
+    def __init__(self,camera_id,camera_sn,thershold=0.9,metric='cm',N_prediction=15,cam_state=False):
+            self.cam_state=cam_state
             self.N_prediction=N_prediction
             self.model_thershold=thershold
-            self.camera=Camera(camera_id=camera_id,camera_sn=camera_sn,resolution="HD",desired_fps=60,cam=True)
+            self.camera=Camera(camera_id=camera_id,camera_sn=camera_sn,resolution="HD",desired_fps=60,cam=self.cam_state)
             self.metric=metric
             self.camera_sn=camera_sn
             self.pose=[]
-            # self.kf_x = ExKalmanFilter()
-            # self.kf_y = ExKalmanFilter()
-            # self.kf_z = ExKalmanFilter()
+
 
 
             # Initialize the EKF with your specific parameters
@@ -43,8 +42,9 @@ class contour_OB:
 
             self.left=balltracking()
             self.right=balltracking()
-            self.actual_positions = []  # List to store (X, Y, depth) tuples of actual positions
+            self.actual_positions = []  # List to store (X, Y, Z) tuples of actual positions
             self.futurepredicted_positions=[]
+            self.parbolic_pred=[]
             self.magnitude_list=[]
             ####################################################################################
             self.app = QApplication(sys.argv)
@@ -75,6 +75,9 @@ class contour_OB:
         self.predictedScatter = gl.GLScatterPlotItem(pos=np.array([[0, 0, 0]]), color=(0, 1, 0, 1), size=10)
         w.addItem(self.predictedScatter)
 
+        self.parabolic_Scatter = gl.GLScatterPlotItem(pos=np.array([[0, 0, 0]]), color=(0, 0, 1, 1), size=10)
+        w.addItem(self.parabolic_Scatter)
+
         axis = gl.GLAxisItem()
         axis.setSize(150, 150, 150)
         w.addItem(axis)
@@ -82,11 +85,11 @@ class contour_OB:
         w.show()
         return w
     
-    def update_plot(self, actual, predicted):
+    def update_plot(self, actual, predicted,trajectory):
         """Update plot with new data."""
         self.actualScatter.setData(pos=actual, color=(1, 0, 0, 1), size=5)
         self.predictedScatter.setData(pos=predicted, color=(0, 1, 0, 1), size=5)
-    
+        self.parabolic_Scatter.setData(pos=trajectory, color=(0, 0, 1, 1), size=5)    
 
     def run_app(self):
         self.app.exec_()
@@ -97,6 +100,20 @@ class contour_OB:
         start_time = time.time()
         fps=0
         while not keyboard.is_pressed("q"):
+            if keyboard.is_pressed("r"):
+                self.actual_positions.clear()
+                self.futurepredicted_positions.clear()
+                self.parbolic_pred.clear()
+                self.magnitude_list.clear()
+                self.actualData.clear()
+                self.predictedData.clear()
+                if self.actualScatter:
+                    self.actualScatter.setData(pos=np.empty((0, 3)))
+                if self.predictedScatter:
+                    self.predictedScatter.setData(pos=np.empty((0, 3)))
+                if self.parabolic_Scatter:
+                    self.parabolic_Scatter.setData(pos=np.empty((0, 3)))
+            
             left_image, right_image = self.camera.capture_frame()
 
             if left_image is None or right_image is None:
@@ -128,15 +145,15 @@ class contour_OB:
 
     def calculate_position(self, Lcenter,Rcenter, left_image, right_image):
         magnitude=0
-        
+        v_initial = np.array([0, 0, 0])
         if right_image is not None and left_image is not None and Lcenter is not None and Rcenter is not None   :
-            X, Y, depth = pose(Rcenter,Lcenter, self.camera.Baseline, self.camera.f_pixel, self.camera.CxCy)
+            X, Y, Z = pose(Rcenter,Lcenter, self.camera.Baseline, self.camera.f_pixel, self.camera.CxCy)
 
-            if X is None or Y is None or depth is None:
+            if X is None or Y is None or Z is None:
                 print("Skipping pose calculation due to invalid disparity.")
                 return
 
-            self.ekf.update(np.array([X,Y,depth]))
+            self.ekf.update(np.array([X,Y,Z]))
             self.ekf.predict()
             next_position1 = self.ekf.x[:3].flatten()
             next_velocity = self.ekf.x[3:].flatten()
@@ -144,7 +161,7 @@ class contour_OB:
             self.magnitude_list.append(magnitude)
             predicted_X = next_position1[0]
             predicted_Y = next_position1[1]
-            predicted_depth = next_position1[2]
+            predicted_Z = next_position1[2]
             
 
             
@@ -152,22 +169,50 @@ class contour_OB:
 
             if not np.isnan(predicted_X) and not np.isnan(predicted_Y) and not np.isinf(predicted_X) and not np.isinf(predicted_Y):
                 # self.futurepredicted_positions.clear()
+                # Estimate initial velocity based on the first two points (or more if you like)
+                dt =self.ekf.dt # Time difference between points, adjust as necessary
+
+                # Constants
+                g = 9.81  # Gravity (m/s^2)
+
+                # Time for future points
+                time_steps = np.linspace(0, 2, num=self.N_prediction)  # Adjust the range and number of points as necessary
+
+                # Initialize arrays for future trajectory points
+                future_points = np.zeros((len(time_steps), 3))
+
+                
 
                 for i in range(self.N_prediction):
 
-                    self.ekf.update(np.array([X,Y,depth]))
+                    self.ekf.update(np.array([X,Y,Z]))
 
                     # Predict next position
                     self.ekf.predict()
                     next_position = self.ekf.x[:3].flatten()
+
                     
                     self.futurepredicted_positions.append([next_position[0], next_position[1], next_position[2]])
+                    
+                    if len(self.futurepredicted_positions) >= self.N_prediction:
+                        # Convert the last two positions from lists to NumPy arrays
+                        pos1 = np.array(self.futurepredicted_positions[-1])
+                        pos2 = np.array(self.futurepredicted_positions[int((-self.N_prediction)/2)])
 
+                        # Calculate initial velocity as a NumPy array
+                        v_initial = (pos1 - pos2) / dt
+                        
+                        # Calculate future points based on estimated initial velocity and gravity
+                        future_points = []
+                        for t in time_steps:
+                            next_pos = pos1 + v_initial * t + 0.5 * np.array([0, 0, -g]) * t**2
+                            future_points.append(next_pos) 
+                        self.parbolic_pred=future_points
 
                 # Ensure img is defined and refers to a valid image
-                self.actual_positions.append([X, Y, depth])
+                self.actual_positions.append([X, Y, Z])
                 
-                self.emitter.newData.emit(np.array(self.actual_positions), np.array(self.futurepredicted_positions))
+                self.emitter.newData.emit(np.array(self.actual_positions), np.array(self.futurepredicted_positions),np.array(self.parbolic_pred))
             else:
                 
                 print("Skipping drawing circle due to invalid predicted_X or predicted_Y values.")
@@ -175,13 +220,13 @@ class contour_OB:
             
             cv2.putText(left_image, f"X: {X:.2f}", (int(Lcenter[0]), int(Lcenter[1] + 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
             cv2.putText(left_image, f"Y: {Y:.2f}", (int(Lcenter[0]), int(Lcenter[1] + 40)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-            cv2.putText(left_image, f"Depth: {depth:.2f}", (int(Lcenter[0]), int(Lcenter[1] + 60)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+            cv2.putText(left_image, f"Z: {Z:.2f}", (int(Lcenter[0]), int(Lcenter[1] + 60)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
 
             
             ##right image
             cv2.putText(right_image, f"X: {X:.2f}", (int(Rcenter[0]), int(Rcenter[1] + 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
             cv2.putText(right_image, f"Y: {Y:.2f}", (int(Rcenter[0]), int(Rcenter[1] + 40)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-            cv2.putText(right_image, f"Depth: {depth:.2f}", (int(Rcenter[0]), int(Rcenter[1] + 60)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+            cv2.putText(right_image, f"Z: {Z:.2f}", (int(Rcenter[0]), int(Rcenter[1] + 60)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
 
             
         
