@@ -13,12 +13,13 @@ from PyQt5.QtCore import QObject, pyqtSignal
 import threading
 import time
 import pyqtgraph.opengl as gl
-from PyQt5.QtGui import QQuaternion
+from scipy.optimize import fsolve
+from pyqtgraph.opengl import GLMeshItem
 
 
 class SignalEmitter(QObject):
     """Emit signals with new data."""
-    newData = pyqtSignal(np.ndarray, np.ndarray, np.ndarray)
+    newData = pyqtSignal(np.ndarray, np.ndarray, np.ndarray,np.ndarray)
 
 
 class contour_OB:
@@ -34,17 +35,19 @@ class contour_OB:
 
 
             # Initialize the EKF with your specific parameters
-            dt = 1/60  # Time step (seconds) - adjust based on your measurement frequency
-            process_noise = 0.1  # Process noise variance
-            measurement_noise = 5.5  # Measurement noise variance (for each x, y, z)
-            error_estimate = 1  # Initial error estimate
-            self.ekf = ExKalmanFilter(dt, process_noise, measurement_noise, error_estimate)
+            dt = 1  # Time step (seconds) - adjust based on your measurement frequency
+            measurement_noise = 0.05  # Measurement noise variance (for each x, y, z)
+            error_estimate = 0.1  # Initial error estimate
+            process_noise_pos=1.9
+            process_noise_vel=0.5
+            process_noise_acc=0.5
+            self.ekf = ExtendedKalmanFilter(dt,  process_noise_pos, process_noise_vel, process_noise_acc, measurement_noise, error_estimate)
 
             self.left=balltracking()
             self.right=balltracking()
             self.actual_positions = []  # List to store (X, Y, Z) tuples of actual positions
             self.futurepredicted_positions=[]
-            self.parbolic_pred=[]
+            self.parabolic_pred=[]
             self.magnitude_list=[]
             ####################################################################################
             self.app = QApplication(sys.argv)
@@ -59,7 +62,6 @@ class contour_OB:
         """Set up the GUI."""
         w = gl.GLViewWidget()
         w.setWindowTitle('Real-time 3D Plotting of Actual vs. Predicted Points')
-        # rotation = QQuaternion.fromEulerAngles(90 ,45,0)
 
         
         w.setCameraPosition(distance=500)
@@ -68,6 +70,29 @@ class contour_OB:
         grid = gl.GLGridItem()
         grid.scale(10, 10, 10)
         w.addItem(grid)
+    # Define the vertices and faces of the plane
+        vertices = np.array([
+            [60, 0, 0],  # Point 1
+            [0, 60, 0],  # Point 2
+            [0, 60, 60],  # Point 3
+            [60, 0, 60]   # Point 4
+        ])
+        faces = np.array([
+            [0, 1, 2],  # First triangle
+            [0, 2, 3]   # Second triangle
+        ])
+        
+        # Define the color for each vertex
+        colors = np.array([
+            [1, 0, 0, 0.3],  # Red, semi-transparent
+            [1, 0, 0, 0.3],  # Green, semi-transparent
+            [1, 0, 0, 0.3],  # Blue, semi-transparent
+            [1, 0, 0, 0.3]   # Yellow, semi-transparent
+        ])
+        
+        # Create the mesh item
+        plane_mesh = GLMeshItem(vertexes=vertices, faces=faces, faceColors=colors, drawEdges=True)
+        w.addItem(plane_mesh)
 
         self.actualScatter = gl.GLScatterPlotItem(pos=np.array([[0, 0, 0]]), color=(1, 0, 0, 1), size=10)
         w.addItem(self.actualScatter)
@@ -78,6 +103,8 @@ class contour_OB:
         self.parabolic_Scatter = gl.GLScatterPlotItem(pos=np.array([[0, 0, 0]]), color=(0, 0, 1, 1), size=10)
         w.addItem(self.parabolic_Scatter)
 
+        self.intersect = gl.GLScatterPlotItem(pos=np.array([[0, 0, 0]]), color=(1, 1, 0, 1), size=10)
+        w.addItem(self.intersect)
         axis = gl.GLAxisItem()
         axis.setSize(150, 150, 150)
         w.addItem(axis)
@@ -85,11 +112,16 @@ class contour_OB:
         w.show()
         return w
     
-    def update_plot(self, actual, predicted,trajectory):
+    def update_plot(self, actual, predicted,trajectory,intersect):
         """Update plot with new data."""
         self.actualScatter.setData(pos=actual, color=(1, 0, 0, 1), size=5)
         self.predictedScatter.setData(pos=predicted, color=(0, 1, 0, 1), size=5)
         self.parabolic_Scatter.setData(pos=trajectory, color=(0, 0, 1, 1), size=5)    
+        # Update intersection plot only if there are intersection points
+        if intersect.size > 0:
+            self.intersect.setData(pos=intersect, color=(1, 1, 0, 1), size=15)
+        else:
+            self.intersect.setData(pos=np.empty((0, 3)))  
 
     def run_app(self):
         self.app.exec_()
@@ -103,7 +135,7 @@ class contour_OB:
             if keyboard.is_pressed("r"):
                 self.actual_positions.clear()
                 self.futurepredicted_positions.clear()
-                self.parbolic_pred.clear()
+                self.parabolic_pred.clear()
                 self.magnitude_list.clear()
                 self.actualData.clear()
                 self.predictedData.clear()
@@ -145,6 +177,7 @@ class contour_OB:
 
     def calculate_position(self, Lcenter,Rcenter, left_image, right_image):
         magnitude=0
+        it=[]
         v_initial = np.array([0, 0, 0])
         if right_image is not None and left_image is not None and Lcenter is not None and Rcenter is not None   :
             X, Y, Z = pose(Rcenter,Lcenter, self.camera.Baseline, self.camera.f_pixel, self.camera.CxCy)
@@ -165,7 +198,10 @@ class contour_OB:
             
 
             
-
+            # def is_point_on_plane(point, vertices):
+            #     normal = np.cross(vertices[1] - vertices[0], vertices[2] - vertices[0])
+            #     D = -np.dot(normal, vertices[0])
+            #     return np.isclose(np.dot(normal, point) + D, 0)
 
             if not np.isnan(predicted_X) and not np.isnan(predicted_Y) and not np.isinf(predicted_X) and not np.isinf(predicted_Y):
                 # self.futurepredicted_positions.clear()
@@ -180,39 +216,34 @@ class contour_OB:
 
                 # Initialize arrays for future trajectory points
                 future_points = np.zeros((len(time_steps), 3))
-
+                # Assuming your plane is defined by the following vertices
+                vertices = np.array([[10, 0, 0], [0, 10, 0], [0, 10, 10], [10, 0, 10]])
+                normal = np.cross(vertices[1] - vertices[0], vertices[2] - vertices[0])
+                point_on_plane = vertices[0]
+                D = -np.dot(normal, point_on_plane)
                 
-
-                for i in range(self.N_prediction):
-
-                    self.ekf.update(np.array([X,Y,Z]))
-
-                    # Predict next position
-                    self.ekf.predict()
-                    next_position = self.ekf.x[:3].flatten()
-
-                    
-                    self.futurepredicted_positions.append([next_position[0], next_position[1], next_position[2]])
-                    
-                    if len(self.futurepredicted_positions) >= self.N_prediction:
-                        # Convert the last two positions from lists to NumPy arrays
-                        pos1 = np.array(self.futurepredicted_positions[-1])
-                        pos2 = np.array(self.futurepredicted_positions[int((-self.N_prediction)/2)])
-
-                        # Calculate initial velocity as a NumPy array
-                        v_initial = (pos1 - pos2) / dt
-                        
-                        # Calculate future points based on estimated initial velocity and gravity
-                        future_points = []
-                        for t in time_steps:
-                            next_pos = pos1 + v_initial * t + 0.5 * np.array([0, 0, -g]) * t**2
-                            future_points.append(next_pos) 
-                        self.parbolic_pred=future_points
-
-                # Ensure img is defined and refers to a valid image
+                # Update your method where you process the EKF output
+                nt=self.ekf.predict_n_steps_ahead(self.N_prediction)
+                for n in nt:
+                    self.futurepredicted_positions.append([n[0], n[1], n[2]])
+                
+                
                 self.actual_positions.append([X, Y, Z])
-                
-                self.emitter.newData.emit(np.array(self.actual_positions), np.array(self.futurepredicted_positions),np.array(self.parbolic_pred))
+                intersection_point=[]
+                if intersection_point is not None:
+                    self.emitter.newData.emit(
+                        np.array(self.actual_positions),
+                        np.array(self.futurepredicted_positions),
+                        np.array(self.parabolic_pred),
+                        np.array([intersection_point])
+                    )
+                else:
+                    self.emitter.newData.emit(
+                        np.array(self.actual_positions),
+                        np.array(self.futurepredicted_positions),
+                        np.array(self.parabolic_pred),
+                        np.array([])  # Emit an empty array if there's no intersection
+                    )
             else:
                 
                 print("Skipping drawing circle due to invalid predicted_X or predicted_Y values.")
@@ -252,7 +283,6 @@ class contour_OB:
         if not self.actual_positions or not self.futurepredicted_positions:
             print("Not enough data for error calculation.")
             return
-
         # Reset errors list for each calculation
         merrors = []
         temp=None
@@ -295,6 +325,7 @@ class contour_OB:
 
     def plot_positions(self):
         # Separate actual and predicted positions into X, Y, Z components for plotting
+        # print(self.futurepredicted_positions)
 
         actual_x, actual_y, actual_z = zip(*self.actual_positions)
         fpredicted_x, fpredicted_y, fpredicted_z = zip(*self.futurepredicted_positions)

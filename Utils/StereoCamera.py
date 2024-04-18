@@ -24,7 +24,7 @@ class Camera:
         if self.cam:
             cap = cv2.VideoCapture(self.camera_id)#r'Utils\vd11_1.mp4'
         else:
-            cap = cv2.VideoCapture(r'data\videos\vd1.mp4')
+            cap = cv2.VideoCapture(r'data\videos\vd11_2.mp4')
             
         if not cap.isOpened():
             print(f"Error opening video stream for camera {self.camera_id}")
