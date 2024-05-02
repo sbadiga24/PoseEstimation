@@ -23,7 +23,7 @@ class ExtendedKalmanFilter:
         A = self.F_jacobian()
         new_x = np.dot(A, x)
         # Account for constant acceleration in the model (e.g., gravity, minus drag)
-        new_x[5] += self.dt * (-9.81)  # Gravity effect on z-axis acceleration
+        new_x[5] += self.dt * (-5.81)  # Gravity effect on z-axis acceleration
         return new_x
 
     def h(self, x):
@@ -57,7 +57,6 @@ class ExtendedKalmanFilter:
 
     def predict_n_steps_ahead(self, n=10):
         x_temp = np.copy(self.x)
-        print(x_temp)
         predictions = []
         for _ in range(n):
             x_temp = self.f(x_temp)

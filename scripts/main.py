@@ -19,13 +19,13 @@ camera2_sn=20778657 #left
 
 
 if __name__ == "__main__":
-    camera1 = contour_OB(camera_id=1,camera_sn=camera1_sn,cam_state=False,N_prediction=15)
-    
+    camera1 = contour_OB(camera_id=1,camera_sn=camera2_sn,cam_state=False,N_prediction=150)
+
     
     # camera2 = contour_OB(camera_id=2,camera_sn=camera2_sn)
 
     # camera2 = ObjectDetection(model_path,camera_id=1,camera_sn=camera2_sn)
-    print(f"Stereo Camera Sn-{camera1_sn}, Parameters: BaseLine-{camera1.camera.Baseline} F_pixel-{camera1.camera.f_pixel} CxCy-{camera1.camera.CxCy}")
+    print(f"Stereo Camera Sn-{camera1.camera_sn}, Parameters: BaseLine-{camera1.camera.Baseline} F_pixel-{camera1.camera.f_pixel} CxCy-{camera1.camera.CxCy}")
     # print(f"Stereo Camera Sn-{camera2_sn}, Parameters: BaseLine-{camera2.camera.Baseline} F_pixel-{camera2.camera.f_pixel} CxCy-{camera2.camera.CxCy}")
 
     thread1 = threading.Thread(target=camera1.process_images,name="camera1_right")

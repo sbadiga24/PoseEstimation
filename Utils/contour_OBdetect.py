@@ -15,6 +15,9 @@ import time
 import pyqtgraph.opengl as gl
 from scipy.optimize import fsolve
 from pyqtgraph.opengl import GLMeshItem
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+# from ROS_socket import *
+import socket
 
 
 class SignalEmitter(QObject):
@@ -31,14 +34,25 @@ class contour_OB:
             self.metric=metric
             self.camera_sn=camera_sn
             self.pose=[]
-
-
+            self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.host = '192.168.2.3'  # The server's IP address
+            self.port = 12345
+    # Plane definition with a single reference point and normal vector
+            self.vertices = np.array([
+                [60, 0, 0],  # Point 1
+                [0, 60, 0],  # Point 2
+                [0, 60, 60],  # Point 3
+                [60, 0, 60]   # Point 4
+            ])
+            self.plane_point = self.vertices[0]  # Use the first vertex as the plane point
+            self.plane_normal = np.cross(self.vertices[1] - self.vertices[0], self.vertices[2] - self.vertices[0])
+            self.plane_normal = self.plane_normal / np.linalg.norm(self.plane_normal) 
 
             # Initialize the EKF with your specific parameters
             dt = 1  # Time step (seconds) - adjust based on your measurement frequency
             measurement_noise = 0.05  # Measurement noise variance (for each x, y, z)
             error_estimate = 0.1  # Initial error estimate
-            process_noise_pos=1.9
+            process_noise_pos=2
             process_noise_vel=0.5
             process_noise_acc=0.5
             self.ekf = ExtendedKalmanFilter(dt,  process_noise_pos, process_noise_vel, process_noise_acc, measurement_noise, error_estimate)
@@ -49,6 +63,7 @@ class contour_OB:
             self.futurepredicted_positions=[]
             self.parabolic_pred=[]
             self.magnitude_list=[]
+            self.intersect_points=[]
             ####################################################################################
             self.app = QApplication(sys.argv)
             self.window = self.setup_ui()
@@ -112,16 +127,42 @@ class contour_OB:
         w.show()
         return w
     
+    def send(self, x, y, z):
+        # This method now just sets up the socket and manages sending
+        try:
+            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client_socket.connect((self.host, self.port))
+            pose = f"Pose(x={x}, y={y}, z={z})"
+            client_socket.sendall(pose.encode('utf-8'))
+            print('Sent:', pose)
+        except Exception as e:
+            print(f"Error sending data: {e}")
+        finally:
+            client_socket.close()
+
+    def send_in_thread(self, x, y, z):
+        # Start the send method in a new thread
+        thread = threading.Thread(target=self.send, args=(x, y, z))
+        thread.start()
+
+                
     def update_plot(self, actual, predicted,trajectory,intersect):
+            # Check the shapes of the data
+  
         """Update plot with new data."""
         self.actualScatter.setData(pos=actual, color=(1, 0, 0, 1), size=5)
         self.predictedScatter.setData(pos=predicted, color=(0, 1, 0, 1), size=5)
-        self.parabolic_Scatter.setData(pos=trajectory, color=(0, 0, 1, 1), size=5)    
+        # self.parabolic_Scatter.setData(pos=trajectory, color=(0, 0, 1, 1), size=5)    
         # Update intersection plot only if there are intersection points
         if intersect.size > 0:
-            self.intersect.setData(pos=intersect, color=(1, 1, 0, 1), size=15)
+            # self.send(intersect[0],intersect[1],intersect[2])
+            self.send_in_thread(intersect[0],intersect[1],intersect[2])
+
+            self.intersect.setData(pos=intersect, color=(0, 0, 0, 1), size=20)
         else:
             self.intersect.setData(pos=np.empty((0, 3)))  
+
+        
 
     def run_app(self):
         self.app.exec_()
@@ -174,10 +215,18 @@ class contour_OB:
                
         self.camera.release()
 
+    def check_intersections(self, points):
+        # Expect points to be an Nx3 array
+        offsets = points - self.plane_point
+        distances = np.dot(offsets, self.plane_normal)
+        intersection_mask = np.abs(distances) < 0.2  # Adjust the threshold as needed
+        return points[intersection_mask]
 
     def calculate_position(self, Lcenter,Rcenter, left_image, right_image):
         magnitude=0
         it=[]
+        last=[]
+        intersection=None
         v_initial = np.array([0, 0, 0])
         if right_image is not None and left_image is not None and Lcenter is not None and Rcenter is not None   :
             X, Y, Z = pose(Rcenter,Lcenter, self.camera.Baseline, self.camera.f_pixel, self.camera.CxCy)
@@ -198,52 +247,42 @@ class contour_OB:
             
 
             
-            # def is_point_on_plane(point, vertices):
-            #     normal = np.cross(vertices[1] - vertices[0], vertices[2] - vertices[0])
-            #     D = -np.dot(normal, vertices[0])
-            #     return np.isclose(np.dot(normal, point) + D, 0)
+
 
             if not np.isnan(predicted_X) and not np.isnan(predicted_Y) and not np.isinf(predicted_X) and not np.isinf(predicted_Y):
                 # self.futurepredicted_positions.clear()
                 # Estimate initial velocity based on the first two points (or more if you like)
                 dt =self.ekf.dt # Time difference between points, adjust as necessary
-
-                # Constants
-                g = 9.81  # Gravity (m/s^2)
-
-                # Time for future points
-                time_steps = np.linspace(0, 2, num=self.N_prediction)  # Adjust the range and number of points as necessary
-
-                # Initialize arrays for future trajectory points
-                future_points = np.zeros((len(time_steps), 3))
-                # Assuming your plane is defined by the following vertices
-                vertices = np.array([[10, 0, 0], [0, 10, 0], [0, 10, 10], [10, 0, 10]])
-                normal = np.cross(vertices[1] - vertices[0], vertices[2] - vertices[0])
-                point_on_plane = vertices[0]
-                D = -np.dot(normal, point_on_plane)
                 
                 # Update your method where you process the EKF output
-                nt=self.ekf.predict_n_steps_ahead(self.N_prediction)
+                nt = self.ekf.predict_n_steps_ahead(self.N_prediction)
+                predicted_positions = np.array([state[:3] for state in nt])  # Ensure this is Nx3
+                intersection_point = np.array(self.check_intersections(predicted_positions))
+                for _ in intersection_point :
+                    print('intersection',_)
+                    intersection=_
+                    self.intersect_points.append(intersection)
                 for n in nt:
                     self.futurepredicted_positions.append([n[0], n[1], n[2]])
                 
                 
                 self.actual_positions.append([X, Y, Z])
-                intersection_point=[]
-                if intersection_point is not None:
+                # intersection_point=[]
+                if intersection is not None:
                     self.emitter.newData.emit(
                         np.array(self.actual_positions),
                         np.array(self.futurepredicted_positions),
                         np.array(self.parabolic_pred),
-                        np.array([intersection_point])
+                        np.array(intersection)
                     )
                 else:
                     self.emitter.newData.emit(
                         np.array(self.actual_positions),
                         np.array(self.futurepredicted_positions),
                         np.array(self.parabolic_pred),
-                        np.array([])  # Emit an empty array if there's no intersection
+                        np.array(last)  # Emit an empty array if there's no intersection
                     )
+                last=intersection    
             else:
                 
                 print("Skipping drawing circle due to invalid predicted_X or predicted_Y values.")
@@ -324,27 +363,41 @@ class contour_OB:
 
 
     def plot_positions(self):
-        # Separate actual and predicted positions into X, Y, Z components for plotting
-        # print(self.futurepredicted_positions)
+            vertices = np.array([
+                [60, 0, 0],   # Point 1
+                [0, 60, 0],   # Point 2
+                [0, 60, 60],  # Point 3
+                [60, 0, 60]   # Point 4
+            ])
+            # Faces of the plane
+            faces = [[vertices[0], vertices[1], vertices[2], vertices[3]]]
 
-        actual_x, actual_y, actual_z = zip(*self.actual_positions)
-        fpredicted_x, fpredicted_y, fpredicted_z = zip(*self.futurepredicted_positions)
+            if self.actual_positions is not None and self.futurepredicted_positions is not None:
+                actual_x, actual_y, actual_z = zip(*self.actual_positions)
+                fpredicted_x, fpredicted_y, fpredicted_z = zip(*self.futurepredicted_positions)
+                inter_x, inter_y, inter_z = zip(*self.intersect_points)
+                
+                # Create 3D plot
+                fig = plt.figure(f'{self.camera_sn}')
+                ax = fig.add_subplot(111, projection='3d')
 
-        
-        # Create 3D plot
-        fig = plt.figure(f'{self.camera_sn}')
-        ax = fig.add_subplot(111, projection='3d')
-        
-        # Plot actual positions
-        ax.plot(actual_x, actual_y, actual_z, c='blue',marker='o', label='Actual', alpha=0.2)
-        # Plot predicted positions
-        ax.plot(fpredicted_x, fpredicted_y, fpredicted_z, c='red',marker='>', label='fPredicted', alpha=0.2)
-        
-        # Labels and legend
-        ax.set_xlabel('X Position')
-        ax.set_ylabel('Y Position')
-        ax.set_zlabel('Z Position')
-        ax.legend()
-        
-        plt.show() 
+                # Plot the plane
+                poly3d = Poly3DCollection(faces, alpha=0.5, facecolor='cyan')
+                ax.add_collection3d(poly3d)
 
+                # Plot actual positions
+                ax.plot(actual_x, actual_y, actual_z, 'bo-', label='Actual', alpha=1)
+                # Plot predicted positions
+                ax.plot(fpredicted_x, fpredicted_y, fpredicted_z, 'r>-', label='Predicted', alpha=0.1)
+                # Plot intersection points
+                ax.scatter(inter_x, inter_y, inter_z, c='green', marker='*', label='Intersection', alpha=1)
+
+                # Labels and legend
+                ax.set_xlabel('X Position')
+                ax.set_ylabel('Y Position')
+                ax.set_zlabel('Z Position')
+                ax.legend()
+
+                plt.show()
+            else:
+                print("Values not found")
